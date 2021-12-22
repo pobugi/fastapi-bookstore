@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "fastapi-bookstore"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+packages = [
+    { include = "app" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+fastapi = "^0.70.1"
+uvicorn = "^0.16.0"
+SQLAlchemy = "^1.4.28"
+pydantic = {extras = ["dotenv"], version = "^1.8.2"}
+psycopg2-binary = "^2.9.2"
+alembic = "^1.7.5"
+pre-commit = "^2.16.0"
+black = "^21.12b0"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+server = "app.runserver:run_uvicorn_server"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
