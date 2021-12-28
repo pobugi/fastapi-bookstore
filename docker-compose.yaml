@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  build_image: &build_image
+    build:
+      context: .
+
+  dev:
+    <<: *build_image
+    command: /venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --ws none
+    env_file:
+      - ./.env
+    volumes:
+      - ./app:/code/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - py-db
+
+  py-db:
+    image: postgres:13-alpine
+    env_file:
+      - ./.env
+    volumes:
+      - ./.db:/var/lib/postgresql/data/
+    ports:
+      - 5422:5432
+
+  migrate:
+    <<: *build_image
+    volumes:
+      - ./alembic:/code/alembic
+    command: /venv/bin/alembic upgrade head
+    depends_on:
+      - py-db
