@@ -1,5 +1,4 @@
 from pydantic import BaseModel, Field
-from pydantic.types import PositiveInt
 
 
 class CustomBaseModel(BaseModel):
@@ -10,7 +9,7 @@ class CustomBaseModel(BaseModel):
 
 class BookBase(CustomBaseModel):
     title: str = Field("Book title", min_length=2, max_length=50)
-    author: str = Field("Book title", min_length=2, max_length=50)
+    author: str = Field("Book author", min_length=2, max_length=50)
 
 
 class BookCreate(BookBase):

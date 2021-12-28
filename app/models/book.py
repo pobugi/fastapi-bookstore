@@ -9,4 +9,4 @@ class Book(Base):
     author = Column(String)
 
     def __str__(self) -> str:
-        return f"{self.title} by {self.author}"
+        return f"Book: {self.title} by {self.author}"

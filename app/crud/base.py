@@ -4,8 +4,10 @@ from app.db.base_class import Base
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sqlalchemy.exc import DatabaseError, DisconnectionError, IntegrityError
-from sqlalchemy.orm import Query, Session
-
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm.exc import UnmappedInstanceError
+from sqlalchemy.sql.selectable import Select
 from .errors import raise_database_error, raise_integrity_error, raise_not_found
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -23,48 +25,51 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         self.model = model
 
-    def get_or_raise(self, db: Session, id: Any) -> ModelType:
-        result = db.query(self.model).filter(self.model.id == id).first()
-        # raise_not_found(result)
-        return result
+    async def object_exists(self, db: AsyncSession, id: int) -> ModelType:
+        query = self.get_query_one(id=id)
+        object = await self.get_or_raise(db=db, query=query)
+        return object
 
-    def get_query(self, db: Session) -> Query:
-        return db.query(self.model)
+    async def get_or_raise(self, db: AsyncSession, query: Select) -> ModelType:
+        result = await db.execute(query)
+        result_obj = result.scalars().first()
+        raise_not_found(result_obj)
+        return result_obj
 
-    def get_many(
-        self, query: Query, skip: int = 0, limit: int = 100
+    def get_query_one(self, id: int) -> Select:
+        return select(self.model).filter(self.model.id == id)
+
+    def get_query_all(self) -> Select:
+        return select(self.model)
+
+    async def get_many(
+        self, db: AsyncSession, query: Select, skip: int = 0, limit: int = 100
     ) -> List[ModelType]:
-        return query.offset(skip).limit(limit).all()
+        result = await db.execute(query.offset(skip).limit(limit))
+        return result.scalars().all()
 
-    def get_one_or_raise(self, query: Query) -> ModelType:
-        result = query.first()
-        # raise_not_found(result)
-        return result
-
-    def create(
-        self, db: Session, obj_in: Union[CreateSchemaType, Dict[str, Any]]
+    async def create(
+        self, db: AsyncSession, obj_in: Union[CreateSchemaType, Dict[str, Any]]
     ) -> ModelType:
         if not isinstance(obj_in, dict):
             obj_in = jsonable_encoder(obj_in, by_alias=False)
         db_obj = self.model(**obj_in)  # type: ignore
         try:
             db.add(db_obj)
-            db.commit()
-            db.refresh(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
         except IntegrityError:
-            pass
-            # raise_integrity_error()
+            raise_integrity_error()
         except (
             DisconnectionError,
             DatabaseError,
         ):
-            pass
-            # raise_database_error()
+            raise_database_error()
         return db_obj
 
-    def update(
+    async def update(
         self,
-        db: Session,
+        db: AsyncSession,
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, Dict[str, Any]]
@@ -79,31 +84,28 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 setattr(db_obj, field, update_data[field])
         try:
             db.add(db_obj)
-            db.commit()
-            db.refresh(db_obj)
+            await db.commit()
+            await db.refresh(db_obj)
         except IntegrityError:
-            pass
-            # raise_integrity_error()
+            raise_integrity_error()
         except (
             DisconnectionError,
             DatabaseError,
         ):
-            pass
-            # raise_database_error()
+            raise_database_error()
         return db_obj
 
-    def remove(self, db: Session, *, id: int) -> ModelType:
-        obj = db.query(self.model).get(id)
+    async def remove(self, db: AsyncSession, id: int) -> ModelType:
+        query = self.get_query_one(id=id)
+        obj = await self.get_or_raise(db=db, query=query)
         try:
-            db.delete(obj)
-            db.commit()
-        except IntegrityError:
-            pass
-            # raise_integrity_error()
+            await db.delete(obj)
+            await db.commit()
+        except (IntegrityError, UnmappedInstanceError):
+            raise_integrity_error()
         except (
             DisconnectionError,
             DatabaseError,
         ):
-            pass
-            # raise_database_error()
+            raise_database_error()
         return obj
